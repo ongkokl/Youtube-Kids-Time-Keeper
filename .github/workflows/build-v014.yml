@@ -1,0 +1,43 @@
+name: Build YouTube Timer Guard v0.1.4 APK
+
+on:
+  push:
+    branches: [ build-v0.1.4 ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore v0.1.4 source
+        shell: bash
+        env:
+          SRC_ZIP_B64: UE...
+        run: |
+          mkdir -p project
+          printf '%s' "$SRC_ZIP_B64" | base64 -d > /tmp/youtube-timer-guard-v014.zip
+          unzip -q /tmp/youtube-timer-guard-v014.zip -d project
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug APK
+        working-directory: project/YouTubeTimerGuard
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YouTubeTimerGuard-v0.1.4-debug-apk
+          path: project/YouTubeTimerGuard/app/build/outputs/apk/debug/app-debug.apk
