@@ -1,0 +1,41 @@
+name: Build YouTube Timer Guard v0.1.4 APK
+
+on:
+  push:
+    branches: [ apk-v014-final ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore launcher icon
+        shell: bash
+        env:
+          ICON_B64: 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
+        run: |
+          mkdir -p app/src/main/res/drawable
+          printf '%s' "$ICON_B64" | base64 -d > app/src/main/res/drawable/kid_icon.webp
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YouTubeTimerGuard-v0.1.4-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
