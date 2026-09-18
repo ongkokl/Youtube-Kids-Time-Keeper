@@ -89,37 +89,32 @@ class MonitorService : Service() {
     override fun onBind(intent: Intent?) = null
 
     private fun updateYouTubeTimer() {
-        val power = getSystemService(Context.POWER_SERVICE) as PowerManager
-        if (!power.isInteractive) {
-            resetTimer("Screen off")
-            return
-        }
-
         val pkg = currentForegroundPackage()
         val isYouTube = pkg == YOUTUBE_PACKAGE || pkg == YOUTUBE_KIDS_PACKAGE
         val now = SystemClock.elapsedRealtime()
+        val limit = Prefs.limitMinutes(this) * 60_000L
 
-        if (isYouTube) {
-            if (youtubeStartedAt == 0L) youtubeStartedAt = now
-            val elapsed = now - youtubeStartedAt
-            val limit = Prefs.limitMinutes(this) * 60_000L
-            val remainingSec = ((limit - elapsed).coerceAtLeast(0L) / 1000L)
-            updateNotification("YouTube: ${remainingSec / 60}:${(remainingSec % 60).toString().padStart(2, '0')} remaining")
-
-            if (elapsed >= limit) {
-                muteMediaForLockout()
-                Prefs.setLockoutActive(this, true)
-                showLockoutOverlay()
-                updateNotification("Time limit reached")
+        if (youtubeStartedAt == 0L) {
+            if (isYouTube) {
+                youtubeStartedAt = now
+                updateNotification("Timer started")
+            } else {
+                updateNotification("Waiting for YouTube")
+                return
             }
-        } else {
-            resetTimer("Waiting for YouTube")
         }
-    }
 
-    private fun resetTimer(notification: String) {
-        youtubeStartedAt = 0L
-        updateNotification(notification)
+        val elapsed = now - youtubeStartedAt
+        val remainingSec = ((limit - elapsed).coerceAtLeast(0L) / 1000L)
+        val statusPrefix = if (isYouTube) "YouTube" else "Timer running"
+        updateNotification("${statusPrefix}: ${remainingSec / 60}:${(remainingSec % 60).toString().padStart(2, '0')} remaining")
+
+        if (elapsed >= limit) {
+            muteMediaForLockout()
+            Prefs.setLockoutActive(this, true)
+            showLockoutOverlay()
+            updateNotification("Time limit reached")
+        }
     }
 
     private fun currentForegroundPackage(): String? {
