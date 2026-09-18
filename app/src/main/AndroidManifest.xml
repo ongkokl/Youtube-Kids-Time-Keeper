@@ -19,7 +19,7 @@
         android:theme="@style/AppTheme">
 
         <activity
-            android:name=".MainActivity"
+            android:name="com.parentguard.youtubetimerguard.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -28,7 +28,7 @@
         </activity>
 
         <service
-            android:name=".MonitorService"
+            android:name="com.parentguard.youtubetimerguard.MonitorService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <property
@@ -37,7 +37,7 @@
         </service>
 
         <receiver
-            android:name=".BootReceiver"
+            android:name="com.parentguard.youtubetimerguard.BootReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
