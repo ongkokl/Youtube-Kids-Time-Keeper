@@ -167,7 +167,7 @@ class MainActivity : Activity() {
             setTextColor(COLOR_TEXT)
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             background = null
-            selectAllOnFocus = true
+            setSelectAllOnFocus(true)
             setPadding(0, 0, 0, 0)
         }
         valueBox.addView(minutesInput, LinearLayout.LayoutParams(dp(70), dp(56)))
