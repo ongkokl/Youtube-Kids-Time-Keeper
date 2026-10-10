@@ -31,3 +31,20 @@ jobs:
         with:
           name: YouTubeTimerGuard-v0.1.7-unsigned
           path: app/build/outputs/apk/release/app-release-unsigned.apk
+
+
+      - name: Export Android signing tools
+        shell: bash
+        run: |
+          BUILD_TOOLS="$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          mkdir -p signing-tools/lib
+          cp "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner" signing-tools/
+          cp "$ANDROID_HOME/build-tools/$BUILD_TOOLS/lib/apksigner.jar" signing-tools/lib/
+          cp "$ANDROID_HOME/build-tools/$BUILD_TOOLS/zipalign" signing-tools/
+          echo "$BUILD_TOOLS" > signing-tools/version.txt
+
+      - name: Upload Android signing tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-signing-tools
+          path: signing-tools
