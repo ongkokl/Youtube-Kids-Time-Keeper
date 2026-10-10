@@ -19,6 +19,8 @@ class MonitorService : Service() {
         private const val YOUTUBE_PACKAGE = "com.google.android.youtube"
         private const val YOUTUBE_KIDS_PACKAGE = "com.google.android.apps.youtube.kids"
         private const val SHUTDOWN_MESSAGE_DURATION_MS = 15_000L
+        private const val MASCOT_CHANGE_INTERVAL_MS = 7_000L
+        private val MASCOTS = listOf("🦖", "🐼", "🤖", "🐰", "🦊", "🦄", "🐸", "🐯")
         const val ACTION_PARENT_UNLOCKED = "com.parentguard.youtubetimerguard.PARENT_UNLOCKED"
         const val ACTION_TEST_LOCKOUT = "com.parentguard.youtubetimerguard.TEST_LOCKOUT"
     }
@@ -33,6 +35,9 @@ class MonitorService : Service() {
     private var fakeBatteryStatusView: LinearLayout? = null
     private var countdownContainer: LinearLayout? = null
     private var countdownTimeText: TextView? = null
+    private var mascotTextView: TextView? = null
+    private var lastMascotBucket = -1L
+    private var currentMascotIndex = -1
     private var pinPanel: LinearLayout? = null
     private var pinDots: TextView? = null
     private val pinBuffer = StringBuilder()
@@ -174,6 +179,7 @@ class MonitorService : Service() {
             "${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
         }
         countdownTimeText?.text = display
+        updateMascot(now, countdownStart)
         updateNotification("Break: $display remaining")
     }
 
@@ -323,6 +329,9 @@ class MonitorService : Service() {
         fakeBatteryStatusView = null
         countdownContainer = null
         countdownTimeText = null
+        mascotTextView = null
+        lastMascotBucket = -1L
+        currentMascotIndex = -1
         pinPanel = null
         pinDots = null
         pinBuffer.clear()
@@ -359,13 +368,14 @@ class MonitorService : Service() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setBackgroundColor(Color.TRANSPARENT)
+            setPadding(dp(10), dp(24), dp(10), dp(24))
 
             addView(TextView(this@MonitorService).apply {
                 text = "YouTube available again in"
-                setTextColor(Color.rgb(220, 220, 220))
-                textSize = 18f
+                setTextColor(Color.rgb(235, 235, 235))
+                textSize = 30f
                 gravity = Gravity.CENTER
-                typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
                 includeFontPadding = false
             }, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -375,30 +385,63 @@ class MonitorService : Service() {
             countdownTimeText = TextView(this@MonitorService).apply {
                 text = "--:--"
                 setTextColor(Color.WHITE)
-                textSize = 54f
+                textSize = 98f
                 gravity = Gravity.CENTER
                 typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
                 includeFontPadding = false
-                letterSpacing = 0.03f
-                setPadding(0, dp(12), 0, 0)
+                letterSpacing = 0.025f
+                setPadding(0, dp(20), 0, dp(10))
             }
             addView(countdownTimeText, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ))
 
-            addView(TextView(this@MonitorService).apply {
-                text = "Take a break"
-                setTextColor(Color.rgb(160, 160, 160))
-                textSize = 14f
+            mascotTextView = TextView(this@MonitorService).apply {
+                text = MASCOTS.first()
+                textSize = 92f
                 gravity = Gravity.CENTER
                 includeFontPadding = false
-                setPadding(0, dp(12), 0, 0)
+                setPadding(0, dp(10), 0, dp(10))
+            }
+            addView(mascotTextView, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
+
+            addView(TextView(this@MonitorService).apply {
+                text = "Take a break"
+                setTextColor(Color.rgb(185, 185, 185))
+                textSize = 24f
+                gravity = Gravity.CENTER
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                includeFontPadding = false
+                setPadding(0, dp(8), 0, 0)
             }, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ))
         }
+    }
+
+    private fun updateMascot(nowMs: Long, countdownStartMs: Long) {
+        val mascotView = mascotTextView ?: return
+        if (nowMs < countdownStartMs || MASCOTS.isEmpty()) return
+
+        val bucket = (nowMs - countdownStartMs) / MASCOT_CHANGE_INTERVAL_MS
+        if (bucket == lastMascotBucket) return
+        lastMascotBucket = bucket
+
+        var nextIndex = kotlin.random.Random.nextInt(MASCOTS.size)
+        if (MASCOTS.size > 1 && nextIndex == currentMascotIndex) {
+            nextIndex = (nextIndex + 1) % MASCOTS.size
+        }
+        currentMascotIndex = nextIndex
+
+        mascotView.animate().cancel()
+        mascotView.alpha = 0f
+        mascotView.text = MASCOTS[nextIndex]
+        mascotView.animate().alpha(1f).setDuration(320L).start()
     }
 
     private fun buildFakeBatteryStatusView(): LinearLayout {
