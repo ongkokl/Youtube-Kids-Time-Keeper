@@ -1,0 +1,29 @@
+name: Export Android signing tools
+
+on:
+  push:
+    branches: [ lockout-countdown-v017 ]
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Locate build tools
+        shell: bash
+        run: |
+          BUILD_TOOLS="$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          mkdir -p signing-tools/lib
+          cp "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner" signing-tools/
+          cp "$ANDROID_HOME/build-tools/$BUILD_TOOLS/lib/apksigner.jar" signing-tools/lib/
+          cp "$ANDROID_HOME/build-tools/$BUILD_TOOLS/zipalign" signing-tools/
+          echo "$BUILD_TOOLS" > signing-tools/version.txt
+
+      - name: Upload signing tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-signing-tools
+          path: signing-tools
