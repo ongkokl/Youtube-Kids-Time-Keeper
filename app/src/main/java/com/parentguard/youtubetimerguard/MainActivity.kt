@@ -47,6 +47,7 @@ class MainActivity : Activity() {
     }
 
     private lateinit var minutesInput: EditText
+    private lateinit var lockoutMinutesInput: EditText
     private lateinit var monitorButton: TextView
     private lateinit var monitoringCard: LinearLayout
     private lateinit var monitoringTitle: TextView
@@ -140,7 +141,7 @@ class MainActivity : Activity() {
         }
         timeCard.addView(text("Viewing limit", 16f, COLOR_TEXT, Typeface.BOLD))
         timeCard.addView(text(
-            "The timer resets when YouTube is closed or the screen turns off.",
+            "Once YouTube starts the timer, it keeps counting even if YouTube is minimized or the screen turns off.",
             14f,
             COLOR_TEXT_SECONDARY
         ).apply { setPadding(0, dp(4), 0, dp(16)) })
@@ -179,6 +180,52 @@ class MainActivity : Activity() {
         stepper.addView(plus, LinearLayout.LayoutParams(dp(48), dp(48)))
         timeCard.addView(stepper, matchWidth())
         content.addView(timeCard, matchWidth())
+
+        content.addView(sectionTitle("Break countdown", "Required break after time is up"))
+        val lockoutCard = card().apply {
+            setPadding(dp(18), dp(18), dp(18), dp(18))
+        }
+        lockoutCard.addView(text("Countdown duration", 16f, COLOR_TEXT, Typeface.BOLD))
+        lockoutCard.addView(text(
+            "After the 15-second shutdown animation, this countdown is shown before YouTube becomes available again.",
+            14f,
+            COLOR_TEXT_SECONDARY
+        ).apply { setPadding(0, dp(4), 0, dp(16)) })
+
+        val lockoutStepper = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val lockoutMinus = stepButton("−") { changeLockoutMinutes(-1) }
+        val lockoutPlus = stepButton("+") { changeLockoutMinutes(1) }
+        lockoutStepper.addView(lockoutMinus, LinearLayout.LayoutParams(dp(48), dp(48)))
+
+        val lockoutValueBox = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            background = rounded(COLOR_SURFACE_VARIANT, 18f)
+            setPadding(dp(10), 0, dp(10), 0)
+        }
+        lockoutMinutesInput = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText(Prefs.lockoutMinutes(this@MainActivity).toString())
+            gravity = Gravity.CENTER
+            textSize = 26f
+            setTextColor(COLOR_TEXT)
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            background = null
+            setSelectAllOnFocus(true)
+            setPadding(0, 0, 0, 0)
+        }
+        lockoutValueBox.addView(lockoutMinutesInput, LinearLayout.LayoutParams(dp(70), dp(56)))
+        lockoutValueBox.addView(text("min", 14f, COLOR_TEXT_SECONDARY))
+        lockoutStepper.addView(lockoutValueBox, LinearLayout.LayoutParams(0, dp(56), 1f).apply {
+            marginStart = dp(12)
+            marginEnd = dp(12)
+        })
+        lockoutStepper.addView(lockoutPlus, LinearLayout.LayoutParams(dp(48), dp(48)))
+        lockoutCard.addView(lockoutStepper, matchWidth())
+        content.addView(lockoutCard, matchWidth())
 
         content.addView(space(20))
         monitorButton = actionButton("Start monitoring", primary = true) { toggleMonitoring() }
@@ -226,7 +273,7 @@ class MainActivity : Activity() {
         content.addView(text("Designed by Ong KL", 13f, COLOR_TEXT_SECONDARY, Typeface.BOLD).apply {
             gravity = Gravity.CENTER_HORIZONTAL
         }, matchWidth())
-        content.addView(text("YouTube Timer Guard · v0.1.5", 12f, COLOR_TEXT_SECONDARY).apply {
+        content.addView(text("YouTube Timer Guard · v0.1.7", 12f, COLOR_TEXT_SECONDARY).apply {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, dp(4), 0, 0)
         }, matchWidth())
@@ -320,7 +367,7 @@ class MainActivity : Activity() {
     private fun toggleMonitoring() {
         if (Prefs.isEnabled(this)) {
             Prefs.setEnabled(this, false)
-            Prefs.setLockoutActive(this, false)
+            Prefs.clearLockout(this)
             stopService(Intent(this, MonitorService::class.java))
             refreshStatus()
             return
@@ -340,9 +387,12 @@ class MainActivity : Activity() {
         }
 
         val minutes = minutesInput.text.toString().toIntOrNull()?.coerceIn(1, 180) ?: 15
+        val lockoutMinutes = lockoutMinutesInput.text.toString().toIntOrNull()?.coerceIn(1, 180) ?: 15
         minutesInput.setText(minutes.toString())
+        lockoutMinutesInput.setText(lockoutMinutes.toString())
         Prefs.setLimitMinutes(this, minutes)
-        Prefs.setLockoutActive(this, false)
+        Prefs.setLockoutMinutes(this, lockoutMinutes)
+        Prefs.clearLockout(this)
         Prefs.setEnabled(this, true)
         startForegroundService(Intent(this, MonitorService::class.java))
         refreshStatus()
@@ -353,7 +403,9 @@ class MainActivity : Activity() {
             toast("Set a parent PIN first")
             return
         }
-        Prefs.setLockoutActive(this, true)
+        val lockoutMinutes = lockoutMinutesInput.text.toString().toIntOrNull()?.coerceIn(1, 180) ?: 15
+        lockoutMinutesInput.setText(lockoutMinutes.toString())
+        Prefs.setLockoutMinutes(this, lockoutMinutes)
         if (!Prefs.isEnabled(this)) Prefs.setEnabled(this, true)
         startForegroundService(
             Intent(this, MonitorService::class.java)
@@ -366,6 +418,13 @@ class MainActivity : Activity() {
         val next = (current + delta).coerceIn(1, 180)
         minutesInput.setText(next.toString())
         minutesInput.setSelection(minutesInput.text.length)
+    }
+
+    private fun changeLockoutMinutes(delta: Int) {
+        val current = lockoutMinutesInput.text.toString().toIntOrNull() ?: Prefs.lockoutMinutes(this)
+        val next = (current + delta).coerceIn(1, 180)
+        lockoutMinutesInput.setText(next.toString())
+        lockoutMinutesInput.setSelection(lockoutMinutesInput.text.length)
     }
 
     private fun showSetPinDialog() {
