@@ -33,6 +33,10 @@ class MonitorService : Service() {
     private var fakeBatteryStatusView: LinearLayout? = null
     private var countdownContainer: LinearLayout? = null
     private var countdownTimeText: TextView? = null
+    private var mascotView: TextView? = null
+    private var mascotNameView: TextView? = null
+    private var lastMascotSlot = -1L
+    private var lastMascotIndex = -1
     private var pinPanel: LinearLayout? = null
     private var pinDots: TextView? = null
     private val pinBuffer = StringBuilder()
@@ -174,6 +178,7 @@ class MonitorService : Service() {
             "${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
         }
         countdownTimeText?.text = display
+        updateMascot(now, countdownStart)
         updateNotification("Break: $display remaining")
     }
 
@@ -323,6 +328,10 @@ class MonitorService : Service() {
         fakeBatteryStatusView = null
         countdownContainer = null
         countdownTimeText = null
+        mascotView = null
+        mascotNameView = null
+        lastMascotSlot = -1L
+        lastMascotIndex = -1
         pinPanel = null
         pinDots = null
         pinBuffer.clear()
@@ -360,12 +369,37 @@ class MonitorService : Service() {
             gravity = Gravity.CENTER
             setBackgroundColor(Color.TRANSPARENT)
 
+            mascotView = TextView(this@MonitorService).apply {
+                text = "🦖"
+                textSize = 88f
+                gravity = Gravity.CENTER
+                includeFontPadding = false
+            }
+            addView(mascotView, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
+
+            mascotNameView = TextView(this@MonitorService).apply {
+                text = "Dino Buddy"
+                setTextColor(Color.rgb(210, 210, 210))
+                textSize = 20f
+                gravity = Gravity.CENTER
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                includeFontPadding = false
+                setPadding(0, dp(4), 0, dp(20))
+            }
+            addView(mascotNameView, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
+
             addView(TextView(this@MonitorService).apply {
                 text = "YouTube available again in"
-                setTextColor(Color.rgb(220, 220, 220))
-                textSize = 18f
+                setTextColor(Color.rgb(235, 235, 235))
+                textSize = 30f
                 gravity = Gravity.CENTER
-                typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
                 includeFontPadding = false
             }, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -375,12 +409,12 @@ class MonitorService : Service() {
             countdownTimeText = TextView(this@MonitorService).apply {
                 text = "--:--"
                 setTextColor(Color.WHITE)
-                textSize = 54f
+                textSize = 98f
                 gravity = Gravity.CENTER
                 typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
                 includeFontPadding = false
                 letterSpacing = 0.03f
-                setPadding(0, dp(12), 0, 0)
+                setPadding(0, dp(12), 0, dp(6))
             }
             addView(countdownTimeText, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -389,16 +423,50 @@ class MonitorService : Service() {
 
             addView(TextView(this@MonitorService).apply {
                 text = "Take a break"
-                setTextColor(Color.rgb(160, 160, 160))
-                textSize = 14f
+                setTextColor(Color.rgb(185, 185, 185))
+                textSize = 24f
                 gravity = Gravity.CENTER
+                typeface = Typeface.create("sans-serif", Typeface.NORMAL)
                 includeFontPadding = false
-                setPadding(0, dp(12), 0, 0)
+                setPadding(0, dp(8), 0, 0)
             }, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ))
         }
+    }
+
+    private fun updateMascot(nowMs: Long, countdownStartMs: Long) {
+        val slot = ((nowMs - countdownStartMs).coerceAtLeast(0L)) / 7_000L
+        if (slot == lastMascotSlot) return
+        lastMascotSlot = slot
+
+        val mascots = arrayOf(
+            "🦖" to "Dino Buddy",
+            "🐼" to "Panda Pal",
+            "🤖" to "Robo Buddy",
+            "🐰" to "Bunny Bounce",
+            "🐱" to "Kitty Star",
+            "🦊" to "Foxy Friend",
+            "🐯" to "Tiger Hero",
+            "🚀" to "Space Explorer"
+        )
+
+        var next = kotlin.random.Random.nextInt(mascots.size)
+        if (mascots.size > 1 && next == lastMascotIndex) {
+            next = (next + 1) % mascots.size
+        }
+        lastMascotIndex = next
+        val mascot = mascots[next]
+
+        mascotView?.animate()?.cancel()
+        mascotNameView?.animate()?.cancel()
+        mascotView?.alpha = 0f
+        mascotNameView?.alpha = 0f
+        mascotView?.text = mascot.first
+        mascotNameView?.text = mascot.second
+        mascotView?.animate()?.alpha(1f)?.setDuration(350L)?.start()
+        mascotNameView?.animate()?.alpha(1f)?.setDuration(350L)?.start()
     }
 
     private fun buildFakeBatteryStatusView(): LinearLayout {
