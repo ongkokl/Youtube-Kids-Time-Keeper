@@ -31,6 +31,8 @@ class MonitorService : Service() {
     private var lockoutOverlay: FrameLayout? = null
     private var shutdownStatusView: LinearLayout? = null
     private var fakeBatteryStatusView: LinearLayout? = null
+    private var countdownContainer: LinearLayout? = null
+    private var countdownTimeText: TextView? = null
     private var pinPanel: LinearLayout? = null
     private var pinDots: TextView? = null
     private val pinBuffer = StringBuilder()
@@ -47,8 +49,7 @@ class MonitorService : Service() {
                 }
 
                 if (Prefs.isLockoutActive(this@MonitorService)) {
-                    muteMediaForLockout()
-                    showLockoutOverlay()
+                    handleLockoutTick()
                 } else {
                     hideLockoutOverlay()
                     updateYouTubeTimer()
@@ -70,11 +71,7 @@ class MonitorService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_PARENT_UNLOCKED -> unlockFromParent()
-            ACTION_TEST_LOCKOUT -> {
-                muteMediaForLockout()
-                Prefs.setLockoutActive(this, true)
-                showLockoutOverlay()
-            }
+            ACTION_TEST_LOCKOUT -> beginLockout()
         }
         return START_STICKY
     }
@@ -110,11 +107,83 @@ class MonitorService : Service() {
         updateNotification("${statusPrefix}: ${remainingSec / 60}:${(remainingSec % 60).toString().padStart(2, '0')} remaining")
 
         if (elapsed >= limit) {
-            muteMediaForLockout()
-            Prefs.setLockoutActive(this, true)
-            showLockoutOverlay()
-            updateNotification("Time limit reached")
+            beginLockout()
         }
+    }
+
+    private fun beginLockout() {
+        val now = System.currentTimeMillis()
+        val countdownStart = now + SHUTDOWN_MESSAGE_DURATION_MS
+        val countdownEnd = countdownStart + Prefs.lockoutMinutes(this) * 60_000L
+        Prefs.startLockout(this, countdownStart, countdownEnd)
+        muteMediaForLockout()
+        showLockoutOverlay()
+        updateLockoutPresentation()
+        updateNotification("Time limit reached")
+    }
+
+    private fun handleLockoutTick() {
+        ensureLockoutWindow()
+        val endMs = Prefs.lockoutEndTimeMs(this)
+        val now = System.currentTimeMillis()
+
+        if (endMs > 0L && now >= endMs) {
+            finishLockoutAutomatically()
+            return
+        }
+
+        muteMediaForLockout()
+        showLockoutOverlay()
+        updateLockoutPresentation()
+    }
+
+    private fun ensureLockoutWindow() {
+        if (Prefs.lockoutCountdownStartMs(this) > 0L && Prefs.lockoutEndTimeMs(this) > 0L) return
+        val now = System.currentTimeMillis()
+        val countdownStart = now + SHUTDOWN_MESSAGE_DURATION_MS
+        val countdownEnd = countdownStart + Prefs.lockoutMinutes(this) * 60_000L
+        Prefs.startLockout(this, countdownStart, countdownEnd)
+    }
+
+    private fun updateLockoutPresentation() {
+        val now = System.currentTimeMillis()
+        val countdownStart = Prefs.lockoutCountdownStartMs(this)
+        val endMs = Prefs.lockoutEndTimeMs(this)
+
+        if (countdownStart <= 0L || endMs <= 0L) return
+
+        if (now < countdownStart) {
+            shutdownStatusView?.visibility = View.VISIBLE
+            fakeBatteryStatusView?.visibility = View.VISIBLE
+            countdownContainer?.visibility = View.GONE
+            return
+        }
+
+        shutdownStatusView?.visibility = View.GONE
+        fakeBatteryStatusView?.visibility = View.GONE
+        countdownContainer?.visibility = View.VISIBLE
+
+        val remainingMs = (endMs - now).coerceAtLeast(0L)
+        val totalSeconds = (remainingMs + 999L) / 1000L
+        val hours = totalSeconds / 3600L
+        val minutes = (totalSeconds % 3600L) / 60L
+        val seconds = totalSeconds % 60L
+        val display = if (hours > 0L) {
+            "${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
+        } else {
+            "${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
+        }
+        countdownTimeText?.text = display
+        updateNotification("Break: $display remaining")
+    }
+
+    private fun finishLockoutAutomatically() {
+        Prefs.clearLockout(this)
+        restoreMediaVolume()
+        hideLockoutOverlay()
+        youtubeStartedAt = 0L
+        lastForegroundPackage = null
+        updateNotification("Break complete — YouTube available")
     }
 
     private fun currentForegroundPackage(): String? {
@@ -193,6 +262,18 @@ class MonitorService : Service() {
             topMargin = (resources.displayMetrics.heightPixels * 0.34f).toInt()
         })
 
+        val countdown = buildCountdownView()
+        countdownContainer = countdown
+        countdown.visibility = View.GONE
+        root.addView(countdown, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER
+        ).apply {
+            leftMargin = dp(28)
+            rightMargin = dp(28)
+        })
+
         val panel = buildPinPanel()
         pinPanel = panel
         panel.visibility = View.GONE
@@ -225,10 +306,7 @@ class MonitorService : Service() {
         try {
             windowManager.addView(root, params)
             lockoutOverlay = root
-            handler.postDelayed({
-                shutdownStatusView?.visibility = View.GONE
-                fakeBatteryStatusView?.visibility = View.GONE
-            }, SHUTDOWN_MESSAGE_DURATION_MS)
+            updateLockoutPresentation()
         } catch (_: Exception) {
             updateNotification("Could not show fake shutdown")
         }
@@ -243,6 +321,8 @@ class MonitorService : Service() {
         lockoutOverlay = null
         shutdownStatusView = null
         fakeBatteryStatusView = null
+        countdownContainer = null
+        countdownTimeText = null
         pinPanel = null
         pinDots = null
         pinBuffer.clear()
@@ -271,6 +351,53 @@ class MonitorService : Service() {
                 gravity = Gravity.CENTER_HORIZONTAL
                 topMargin = dp(22)
             })
+        }
+    }
+
+    private fun buildCountdownView(): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(Color.TRANSPARENT)
+
+            addView(TextView(this@MonitorService).apply {
+                text = "YouTube available again in"
+                setTextColor(Color.rgb(220, 220, 220))
+                textSize = 18f
+                gravity = Gravity.CENTER
+                typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+                includeFontPadding = false
+            }, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
+
+            countdownTimeText = TextView(this@MonitorService).apply {
+                text = "--:--"
+                setTextColor(Color.WHITE)
+                textSize = 54f
+                gravity = Gravity.CENTER
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                includeFontPadding = false
+                letterSpacing = 0.03f
+                setPadding(0, dp(12), 0, 0)
+            }
+            addView(countdownTimeText, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
+
+            addView(TextView(this@MonitorService).apply {
+                text = "Take a break"
+                setTextColor(Color.rgb(160, 160, 160))
+                textSize = 14f
+                gravity = Gravity.CENTER
+                includeFontPadding = false
+                setPadding(0, dp(12), 0, 0)
+            }, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
         }
     }
 
@@ -414,7 +541,7 @@ class MonitorService : Service() {
     }
 
     private fun unlockFromParent() {
-        Prefs.setLockoutActive(this, false)
+        Prefs.clearLockout(this)
         restoreMediaVolume()
         hideLockoutOverlay()
         youtubeStartedAt = 0L
