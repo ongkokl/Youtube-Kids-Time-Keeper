@@ -94,7 +94,7 @@ class MainActivity : Activity() {
         }
         monitoringTitle = text("Monitoring is off", 20f, COLOR_TEXT, Typeface.BOLD)
         monitoringDescription = text(
-            "Complete setup, choose a time limit, then start monitoring.",
+            "Complete setup, choose a viewing limit and break countdown, then start monitoring.",
             14f,
             COLOR_TEXT_SECONDARY
         ).apply { setPadding(0, dp(6), 0, 0) }
@@ -129,7 +129,7 @@ class MainActivity : Activity() {
         setupCard.addView(divider())
         setupCard.addView(settingRow(
             title = "Parent PIN",
-            subtitle = "Required to exit the shutdown screen",
+            subtitle = "Allows the parent to end the shutdown countdown early",
             status = pinStatus,
             onClick = { showSetPinDialog() }
         ))
