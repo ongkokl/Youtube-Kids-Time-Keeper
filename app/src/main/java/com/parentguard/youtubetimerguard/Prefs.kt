@@ -8,6 +8,9 @@ object Prefs {
     private const val FILE = "guard_prefs"
     private const val KEY_ENABLED = "enabled"
     private const val KEY_LIMIT_MINUTES = "limit_minutes"
+    private const val KEY_LOCKOUT_MINUTES = "lockout_minutes"
+    private const val KEY_LOCKOUT_COUNTDOWN_START_MS = "lockout_countdown_start_ms"
+    private const val KEY_LOCKOUT_END_MS = "lockout_end_ms"
     private const val KEY_PIN_SALT = "pin_salt"
     private const val KEY_PIN_HASH = "pin_hash"
     private const val KEY_LOCKOUT = "lockout_active"
@@ -21,8 +24,36 @@ object Prefs {
     fun setLimitMinutes(context: Context, minutes: Int) =
         prefs(context).edit().putInt(KEY_LIMIT_MINUTES, minutes.coerceIn(1, 180)).apply()
 
+    fun lockoutMinutes(context: Context): Int =
+        prefs(context).getInt(KEY_LOCKOUT_MINUTES, 15).coerceIn(1, 180)
+
+    fun setLockoutMinutes(context: Context, minutes: Int) =
+        prefs(context).edit().putInt(KEY_LOCKOUT_MINUTES, minutes.coerceIn(1, 180)).apply()
+
     fun isLockoutActive(context: Context): Boolean = prefs(context).getBoolean(KEY_LOCKOUT, false)
     fun setLockoutActive(context: Context, value: Boolean) = prefs(context).edit().putBoolean(KEY_LOCKOUT, value).apply()
+
+    fun lockoutCountdownStartMs(context: Context): Long =
+        prefs(context).getLong(KEY_LOCKOUT_COUNTDOWN_START_MS, 0L)
+
+    fun lockoutEndTimeMs(context: Context): Long =
+        prefs(context).getLong(KEY_LOCKOUT_END_MS, 0L)
+
+    fun startLockout(context: Context, countdownStartMs: Long, endMs: Long) {
+        prefs(context).edit()
+            .putBoolean(KEY_LOCKOUT, true)
+            .putLong(KEY_LOCKOUT_COUNTDOWN_START_MS, countdownStartMs)
+            .putLong(KEY_LOCKOUT_END_MS, endMs)
+            .apply()
+    }
+
+    fun clearLockout(context: Context) {
+        prefs(context).edit()
+            .putBoolean(KEY_LOCKOUT, false)
+            .remove(KEY_LOCKOUT_COUNTDOWN_START_MS)
+            .remove(KEY_LOCKOUT_END_MS)
+            .apply()
+    }
 
     fun hasPin(context: Context): Boolean = prefs(context).contains(KEY_PIN_HASH)
 
