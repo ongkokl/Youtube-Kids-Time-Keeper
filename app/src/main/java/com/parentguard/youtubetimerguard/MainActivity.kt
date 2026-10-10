@@ -187,7 +187,7 @@ class MainActivity : Activity() {
         }
         lockoutCard.addView(text("Countdown duration", 16f, COLOR_TEXT, Typeface.BOLD))
         lockoutCard.addView(text(
-            "After the 15-second shutdown animation, this countdown is shown before YouTube becomes available again.",
+            "After the 15-second shutdown animation, a large countdown and rotating kid-friendly mascot are shown before YouTube becomes available again.",
             14f,
             COLOR_TEXT_SECONDARY
         ).apply { setPadding(0, dp(4), 0, dp(16)) })
@@ -273,7 +273,7 @@ class MainActivity : Activity() {
         content.addView(text("Designed by Ong KL", 13f, COLOR_TEXT_SECONDARY, Typeface.BOLD).apply {
             gravity = Gravity.CENTER_HORIZONTAL
         }, matchWidth())
-        content.addView(text("YouTube Timer Guard · v0.1.7", 12f, COLOR_TEXT_SECONDARY).apply {
+        content.addView(text("YouTube Timer Guard · v0.1.8", 12f, COLOR_TEXT_SECONDARY).apply {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, dp(4), 0, 0)
         }, matchWidth())
