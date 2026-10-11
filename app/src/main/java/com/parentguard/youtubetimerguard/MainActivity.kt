@@ -299,7 +299,7 @@ class MainActivity : Activity() {
             setPadding(dp(4), dp(4), dp(4), dp(4))
         }
         val icon = ImageView(this).apply {
-            setImageResource(R.drawable.kid_icon)
+            setImageResource(R.drawable.kid_safe_icon)
             scaleType = ImageView.ScaleType.CENTER_CROP
             background = rounded(Color.LTGRAY, 18f)
             clipToOutline = true
