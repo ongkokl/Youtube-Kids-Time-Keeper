@@ -3,7 +3,7 @@ name: Capture Play Store Screenshots
 on:
   workflow_dispatch:
   push:
-    branches: [ play-store-v021 ]
+    branches: [ play-screenshots-api35 ]
 
 jobs:
   screenshots:
