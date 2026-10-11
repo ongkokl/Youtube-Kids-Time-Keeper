@@ -18,6 +18,10 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <meta-data
+            android:name="isMonitoringTool"
+            android:value="child_monitoring" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -33,7 +37,7 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Parental-control timer that monitors foreground YouTube use." />
+                android:value="Parent-enabled screen-time monitor that detects YouTube and YouTube Kids foreground use and enforces configured break periods." />
         </service>
 
         <receiver
