@@ -1,8 +1,8 @@
-name: Build Screen Time Guard v0.2.2
+name: Build Screen Time Guard v0.2.3
 
 on:
   push:
-    branches: [ v022-new-icon ]
+    branches: [ v023-icon-install-fix ]
   workflow_dispatch:
 
 jobs:
@@ -32,11 +32,11 @@ jobs:
       - name: Upload unsigned AAB
         uses: actions/upload-artifact@v4
         with:
-          name: ScreenTimeGuard-v0.2.2-unsigned-aab
+          name: ScreenTimeGuard-v0.2.3-unsigned-aab
           path: app/build/outputs/bundle/release/app-release.aab
 
       - name: Upload unsigned APK
         uses: actions/upload-artifact@v4
         with:
-          name: ScreenTimeGuard-v0.2.2-unsigned-apk
+          name: ScreenTimeGuard-v0.2.3-unsigned-apk
           path: app/build/outputs/apk/release/app-release-unsigned.apk
