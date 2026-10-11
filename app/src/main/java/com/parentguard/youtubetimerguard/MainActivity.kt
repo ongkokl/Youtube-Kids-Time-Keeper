@@ -403,6 +403,9 @@ class MainActivity : Activity() {
             toast("Set a parent PIN first")
             return
         }
+        val breakMinutes = breakMinutesInput.text.toString().toIntOrNull()?.coerceIn(1, 180) ?: 30
+        breakMinutesInput.setText(breakMinutes.toString())
+        Prefs.setBreakMinutes(this, breakMinutes)
         Prefs.setLockoutActive(this, true)
         if (!Prefs.isEnabled(this)) Prefs.setEnabled(this, true)
         startForegroundService(
