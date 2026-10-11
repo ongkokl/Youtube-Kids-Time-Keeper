@@ -267,7 +267,7 @@ class MainActivity : Activity() {
         content.addView(text("Designed by Ong KL", 13f, COLOR_TEXT_SECONDARY, Typeface.BOLD).apply {
             gravity = Gravity.CENTER_HORIZONTAL
         }, matchWidth())
-        content.addView(text("Screen Time Guard · v0.2.1", 12f, COLOR_TEXT_SECONDARY).apply {
+        content.addView(text("Screen Time Guard · v0.2.2", 12f, COLOR_TEXT_SECONDARY).apply {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, dp(4), 0, 0)
         }, matchWidth())
@@ -293,7 +293,7 @@ class MainActivity : Activity() {
             setPadding(dp(4), dp(4), dp(4), dp(4))
         }
         val icon = ImageView(this).apply {
-            setImageResource(R.drawable.kid_safe_icon)
+            setImageResource(R.drawable.kid_safe_icon_v022)
             scaleType = ImageView.ScaleType.CENTER_CROP
             background = rounded(Color.LTGRAY, 18f)
             clipToOutline = true
