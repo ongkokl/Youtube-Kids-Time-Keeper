@@ -48,8 +48,15 @@ class MonitorService : Service() {
                     if (Prefs.lockoutRemainingMillis(this@MonitorService) <= 0L) {
                         finishBreak("Break finished")
                     } else {
-                        muteMediaForLockout()
-                        showLockoutOverlay()
+                        val pkg = currentForegroundPackage()
+                        val isBlockedVideoApp = pkg == YOUTUBE_PACKAGE || pkg == YOUTUBE_KIDS_PACKAGE
+                        if (isBlockedVideoApp) {
+                            muteMediaForLockout()
+                            showLockoutOverlay()
+                        } else {
+                            hideLockoutOverlay()
+                            restoreMediaVolume()
+                        }
                         updateBreakCountdown()
                     }
                 } else {
@@ -66,7 +73,7 @@ class MonitorService : Service() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification("Watching for YouTube use"))
+        startForeground(NOTIFICATION_ID, buildNotification("Screen-time monitoring is active"))
         handler.post(tick)
     }
 
@@ -232,7 +239,7 @@ class MonitorService : Service() {
             setBackgroundColor(Color.rgb(24, 45, 67))
 
             addView(TextView(this@MonitorService).apply {
-                text = "YouTube Timer Guard"
+                text = "Screen Time Guard"
                 setTextColor(Color.rgb(176, 203, 230))
                 textSize = 15f
                 gravity = Gravity.CENTER
@@ -249,7 +256,7 @@ class MonitorService : Service() {
             }, matchWidth())
 
             addView(TextView(this@MonitorService).apply {
-                text = "YouTube time is finished"
+                text = "Viewing time is finished"
                 setTextColor(Color.rgb(210, 224, 238))
                 textSize = 17f
                 gravity = Gravity.CENTER
@@ -268,7 +275,7 @@ class MonitorService : Service() {
             addView(countdown, matchWidth())
 
             addView(TextView(this@MonitorService).apply {
-                text = "You can use YouTube again when the timer reaches 00:00."
+                text = "YouTube and YouTube Kids are available again when the timer reaches 00:00. Other apps remain available during the break."
                 setTextColor(Color.rgb(210, 224, 238))
                 textSize = 15f
                 gravity = Gravity.CENTER
@@ -429,8 +436,8 @@ class MonitorService : Service() {
     private fun createNotificationChannel() {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "YouTube Timer Guard", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Required while the YouTube timer is active"
+            NotificationChannel(CHANNEL_ID, "Screen Time Guard", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Required while parental screen-time monitoring is active"
                 setShowBadge(false)
             }
         )
@@ -444,7 +451,7 @@ class MonitorService : Service() {
         )
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle("YouTube Timer Guard")
+            .setContentTitle("Screen Time Guard")
             .setContentText(text)
             .setOngoing(true)
             .setContentIntent(open)
