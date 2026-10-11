@@ -8,9 +8,11 @@ object Prefs {
     private const val FILE = "guard_prefs"
     private const val KEY_ENABLED = "enabled"
     private const val KEY_LIMIT_MINUTES = "limit_minutes"
+    private const val KEY_BREAK_MINUTES = "break_minutes"
     private const val KEY_PIN_SALT = "pin_salt"
     private const val KEY_PIN_HASH = "pin_hash"
     private const val KEY_LOCKOUT = "lockout_active"
+    private const val KEY_LOCKOUT_END_EPOCH_MS = "lockout_end_epoch_ms"
     private const val KEY_SAVED_MEDIA_VOLUME = "saved_media_volume"
     private const val KEY_HAS_SAVED_MEDIA_VOLUME = "has_saved_media_volume"
 
@@ -21,8 +23,38 @@ object Prefs {
     fun setLimitMinutes(context: Context, minutes: Int) =
         prefs(context).edit().putInt(KEY_LIMIT_MINUTES, minutes.coerceIn(1, 180)).apply()
 
+    fun breakMinutes(context: Context): Int = prefs(context).getInt(KEY_BREAK_MINUTES, 30).coerceIn(1, 180)
+    fun setBreakMinutes(context: Context, minutes: Int) =
+        prefs(context).edit().putInt(KEY_BREAK_MINUTES, minutes.coerceIn(1, 180)).apply()
+
     fun isLockoutActive(context: Context): Boolean = prefs(context).getBoolean(KEY_LOCKOUT, false)
-    fun setLockoutActive(context: Context, value: Boolean) = prefs(context).edit().putBoolean(KEY_LOCKOUT, value).apply()
+
+    fun setLockoutActive(context: Context, value: Boolean) {
+        val p = prefs(context)
+        if (value) {
+            val currentEnd = p.getLong(KEY_LOCKOUT_END_EPOCH_MS, 0L)
+            val end = if (currentEnd > System.currentTimeMillis()) {
+                currentEnd
+            } else {
+                System.currentTimeMillis() + breakMinutes(context) * 60_000L
+            }
+            p.edit()
+                .putBoolean(KEY_LOCKOUT, true)
+                .putLong(KEY_LOCKOUT_END_EPOCH_MS, end)
+                .apply()
+        } else {
+            p.edit()
+                .putBoolean(KEY_LOCKOUT, false)
+                .remove(KEY_LOCKOUT_END_EPOCH_MS)
+                .apply()
+        }
+    }
+
+    fun lockoutEndEpochMs(context: Context): Long =
+        prefs(context).getLong(KEY_LOCKOUT_END_EPOCH_MS, 0L)
+
+    fun lockoutRemainingMillis(context: Context): Long =
+        (lockoutEndEpochMs(context) - System.currentTimeMillis()).coerceAtLeast(0L)
 
     fun hasPin(context: Context): Boolean = prefs(context).contains(KEY_PIN_HASH)
 

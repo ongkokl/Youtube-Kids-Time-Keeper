@@ -64,3 +64,16 @@ The fake shutdown now shows a centered “Shutting down...” message with a sma
 - Restores the previous media volume after the parent PIN unlocks.
 - Shows a fake 0% / empty-battery indicator during the 15-second shutdown animation.
 - The real Android battery percentage is not modified.
+
+
+## v0.2.0
+
+- Replaced the fake shutdown / fake 0% battery experience with a clearly branded **Break time** screen.
+- Added a configurable break duration (1–180 minutes, default 30 minutes).
+- When the viewing limit is reached, media volume is muted and the break countdown is shown.
+- At 00:00, the break screen closes automatically, media volume is restored, and a new viewing session may begin.
+- Parent PIN can end a break early.
+- The viewing timer continues after YouTube is minimized once the session has started.
+- Added a kid-safe shield/timer launcher icon.
+- Added a persistent break-end timestamp so the countdown survives service restarts.
+- v0.2.0 is the first build intended to use a stable signing identity for future sideload updates.

@@ -18,7 +18,6 @@ class MonitorService : Service() {
         private const val NOTIFICATION_ID = 1515
         private const val YOUTUBE_PACKAGE = "com.google.android.youtube"
         private const val YOUTUBE_KIDS_PACKAGE = "com.google.android.apps.youtube.kids"
-        private const val SHUTDOWN_MESSAGE_DURATION_MS = 15_000L
         const val ACTION_PARENT_UNLOCKED = "com.parentguard.youtubetimerguard.PARENT_UNLOCKED"
         const val ACTION_TEST_LOCKOUT = "com.parentguard.youtubetimerguard.TEST_LOCKOUT"
     }
@@ -29,8 +28,7 @@ class MonitorService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var lockoutOverlay: FrameLayout? = null
-    private var shutdownStatusView: LinearLayout? = null
-    private var fakeBatteryStatusView: LinearLayout? = null
+    private var breakCountdownView: TextView? = null
     private var pinPanel: LinearLayout? = null
     private var pinDots: TextView? = null
     private val pinBuffer = StringBuilder()
@@ -47,8 +45,13 @@ class MonitorService : Service() {
                 }
 
                 if (Prefs.isLockoutActive(this@MonitorService)) {
-                    muteMediaForLockout()
-                    showLockoutOverlay()
+                    if (Prefs.lockoutRemainingMillis(this@MonitorService) <= 0L) {
+                        finishBreak("Break finished")
+                    } else {
+                        muteMediaForLockout()
+                        showLockoutOverlay()
+                        updateBreakCountdown()
+                    }
                 } else {
                     hideLockoutOverlay()
                     updateYouTubeTimer()
@@ -89,37 +92,32 @@ class MonitorService : Service() {
     override fun onBind(intent: Intent?) = null
 
     private fun updateYouTubeTimer() {
-        val power = getSystemService(Context.POWER_SERVICE) as PowerManager
-        if (!power.isInteractive) {
-            resetTimer("Screen off")
-            return
-        }
-
         val pkg = currentForegroundPackage()
         val isYouTube = pkg == YOUTUBE_PACKAGE || pkg == YOUTUBE_KIDS_PACKAGE
         val now = SystemClock.elapsedRealtime()
+        val limit = Prefs.limitMinutes(this) * 60_000L
 
-        if (isYouTube) {
-            if (youtubeStartedAt == 0L) youtubeStartedAt = now
-            val elapsed = now - youtubeStartedAt
-            val limit = Prefs.limitMinutes(this) * 60_000L
-            val remainingSec = ((limit - elapsed).coerceAtLeast(0L) / 1000L)
-            updateNotification("YouTube: ${remainingSec / 60}:${(remainingSec % 60).toString().padStart(2, '0')} remaining")
-
-            if (elapsed >= limit) {
-                muteMediaForLockout()
-                Prefs.setLockoutActive(this, true)
-                showLockoutOverlay()
-                updateNotification("Time limit reached")
+        if (youtubeStartedAt == 0L) {
+            if (isYouTube) {
+                youtubeStartedAt = now
+                updateNotification("Timer started")
+            } else {
+                updateNotification("Waiting for YouTube")
+                return
             }
-        } else {
-            resetTimer("Waiting for YouTube")
         }
-    }
 
-    private fun resetTimer(notification: String) {
-        youtubeStartedAt = 0L
-        updateNotification(notification)
+        val elapsed = now - youtubeStartedAt
+        val remainingSec = ((limit - elapsed).coerceAtLeast(0L) / 1000L)
+        val statusPrefix = if (isYouTube) "YouTube" else "Timer running"
+        updateNotification("${statusPrefix}: ${remainingSec / 60}:${(remainingSec % 60).toString().padStart(2, '0')} remaining")
+
+        if (elapsed >= limit) {
+            muteMediaForLockout()
+            Prefs.setLockoutActive(this, true)
+            showLockoutOverlay()
+            updateNotification("Break time started")
+        }
     }
 
     private fun currentForegroundPackage(): String? {
@@ -155,7 +153,7 @@ class MonitorService : Service() {
         firstTapAt = 0L
 
         val root = FrameLayout(this).apply {
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(Color.rgb(13, 27, 42))
             isClickable = true
             isFocusable = true
             setOnTouchListener { _, event ->
@@ -168,34 +166,14 @@ class MonitorService : Service() {
             }
         }
 
-        @Suppress("DEPRECATION")
-        root.systemUiVisibility =
-            View.SYSTEM_UI_FLAG_FULLSCREEN or
-            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
-            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
-            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-
-        val fakeBattery = buildFakeBatteryStatusView()
-        fakeBatteryStatusView = fakeBattery
-        root.addView(fakeBattery, FrameLayout.LayoutParams(
+        val content = buildBreakContent()
+        root.addView(content, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.TOP or Gravity.END
+            Gravity.CENTER
         ).apply {
-            topMargin = dp(14)
-            marginEnd = dp(18)
-        })
-
-        val shutdownStatus = buildShutdownStatusView()
-        shutdownStatusView = shutdownStatus
-        root.addView(shutdownStatus, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        ).apply {
-            topMargin = (resources.displayMetrics.heightPixels * 0.34f).toInt()
+            leftMargin = dp(28)
+            rightMargin = dp(28)
         })
 
         val panel = buildPinPanel()
@@ -215,27 +193,21 @@ class MonitorService : Service() {
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
             PixelFormat.OPAQUE
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            screenBrightness = 0.01f
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
             }
         }
 
         try {
             windowManager.addView(root, params)
             lockoutOverlay = root
-            handler.postDelayed({
-                shutdownStatusView?.visibility = View.GONE
-                fakeBatteryStatusView?.visibility = View.GONE
-            }, SHUTDOWN_MESSAGE_DURATION_MS)
+            updateBreakCountdown()
         } catch (_: Exception) {
-            updateNotification("Could not show fake shutdown")
+            updateNotification("Could not show break countdown")
         }
     }
 
@@ -246,59 +218,91 @@ class MonitorService : Service() {
         } catch (_: Exception) {
         }
         lockoutOverlay = null
-        shutdownStatusView = null
-        fakeBatteryStatusView = null
+        breakCountdownView = null
         pinPanel = null
         pinDots = null
         pinBuffer.clear()
     }
 
-    private fun buildShutdownStatusView(): LinearLayout {
+    private fun buildBreakContent(): LinearLayout {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setBackgroundColor(Color.TRANSPARENT)
+            gravity = Gravity.CENTER
+            setPadding(dp(24), dp(28), dp(24), dp(28))
+            setBackgroundColor(Color.rgb(24, 45, 67))
 
             addView(TextView(this@MonitorService).apply {
-                text = "Shutting down..."
-                setTextColor(Color.rgb(245, 245, 245))
-                textSize = 24f
+                text = "YouTube Timer Guard"
+                setTextColor(Color.rgb(176, 203, 230))
+                textSize = 15f
                 gravity = Gravity.CENTER
                 typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                letterSpacing = 0.01f
-                includeFontPadding = false
-            }, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ))
+            }, matchWidth())
 
-            addView(ShutdownSpinnerView(this@MonitorService), LinearLayout.LayoutParams(dp(14), dp(14)).apply {
-                gravity = Gravity.CENTER_HORIZONTAL
-                topMargin = dp(22)
-            })
+            addView(TextView(this@MonitorService).apply {
+                text = "Break time"
+                setTextColor(Color.WHITE)
+                textSize = 30f
+                gravity = Gravity.CENTER
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                setPadding(0, dp(18), 0, 0)
+            }, matchWidth())
+
+            addView(TextView(this@MonitorService).apply {
+                text = "YouTube time is finished"
+                setTextColor(Color.rgb(210, 224, 238))
+                textSize = 17f
+                gravity = Gravity.CENTER
+                setPadding(0, dp(8), 0, dp(22))
+            }, matchWidth())
+
+            val countdown = TextView(this@MonitorService).apply {
+                text = "--:--"
+                setTextColor(Color.WHITE)
+                textSize = 56f
+                gravity = Gravity.CENTER
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                includeFontPadding = false
+            }
+            breakCountdownView = countdown
+            addView(countdown, matchWidth())
+
+            addView(TextView(this@MonitorService).apply {
+                text = "You can use YouTube again when the timer reaches 00:00."
+                setTextColor(Color.rgb(210, 224, 238))
+                textSize = 15f
+                gravity = Gravity.CENTER
+                setPadding(0, dp(18), 0, dp(18))
+            }, matchWidth())
+
+            addView(Button(this@MonitorService).apply {
+                text = "PARENT UNLOCK"
+                setOnClickListener {
+                    pinBuffer.clear()
+                    updatePinDots()
+                    pinPanel?.visibility = View.VISIBLE
+                }
+            }, matchWidth())
         }
     }
 
-    private fun buildFakeBatteryStatusView(): LinearLayout {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(6), dp(4), dp(6), dp(4))
-            setBackgroundColor(Color.BLACK)
+    private fun updateBreakCountdown() {
+        val remainingMs = Prefs.lockoutRemainingMillis(this)
+        val remainingSec = ((remainingMs + 999L) / 1000L).coerceAtLeast(0L)
+        val minutes = remainingSec / 60L
+        val seconds = remainingSec % 60L
+        val formatted = "${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
+        breakCountdownView?.text = formatted
+        updateNotification("Break time: $formatted remaining")
+    }
 
-            addView(TextView(this@MonitorService).apply {
-                text = "0%"
-                setTextColor(Color.rgb(235, 235, 235))
-                textSize = 13f
-                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                includeFontPadding = false
-            }, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { marginEnd = dp(5) })
-
-            addView(EmptyBatteryView(this@MonitorService), LinearLayout.LayoutParams(dp(24), dp(12)))
-        }
+    private fun finishBreak(notificationText: String) {
+        Prefs.setLockoutActive(this, false)
+        restoreMediaVolume()
+        hideLockoutOverlay()
+        youtubeStartedAt = 0L
+        lastForegroundPackage = null
+        updateNotification(notificationText)
     }
 
     private fun muteMediaForLockout() {
@@ -419,12 +423,7 @@ class MonitorService : Service() {
     }
 
     private fun unlockFromParent() {
-        Prefs.setLockoutActive(this, false)
-        restoreMediaVolume()
-        hideLockoutOverlay()
-        youtubeStartedAt = 0L
-        lastForegroundPackage = null
-        updateNotification("Monitoring resumed")
+        finishBreak("Parent ended break")
     }
 
     private fun createNotificationChannel() {
@@ -463,69 +462,5 @@ class MonitorService : Service() {
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    private class EmptyBatteryView(context: Context) : View(context) {
-        private val density = resources.displayMetrics.density
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 1.5f * density
-            color = Color.rgb(235, 235, 235)
-        }
 
-        override fun onDraw(canvas: Canvas) {
-            super.onDraw(canvas)
-            val stroke = paint.strokeWidth
-            val nubWidth = 2.5f * density
-            val body = RectF(
-                stroke,
-                stroke,
-                width - nubWidth - stroke,
-                height - stroke
-            )
-            canvas.drawRoundRect(body, 2f * density, 2f * density, paint)
-            val nubLeft = body.right + stroke
-            val nub = RectF(
-                nubLeft,
-                height * 0.34f,
-                width - stroke,
-                height * 0.66f
-            )
-            canvas.drawRect(nub, paint)
-        }
-    }
-
-    private class ShutdownSpinnerView(context: Context) : View(context) {
-        private val density = resources.displayMetrics.density
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeCap = Paint.Cap.ROUND
-            strokeWidth = 1.8f * density
-            color = Color.WHITE
-        }
-        private var angle = 0f
-        private val spin = object : Runnable {
-            override fun run() {
-                angle = (angle + 12f) % 360f
-                invalidate()
-                postDelayed(this, 16L)
-            }
-        }
-
-        override fun onAttachedToWindow() {
-            super.onAttachedToWindow()
-            removeCallbacks(spin)
-            post(spin)
-        }
-
-        override fun onDetachedFromWindow() {
-            removeCallbacks(spin)
-            super.onDetachedFromWindow()
-        }
-
-        override fun onDraw(canvas: Canvas) {
-            super.onDraw(canvas)
-            val inset = paint.strokeWidth / 2f + density
-            val oval = RectF(inset, inset, width - inset, height - inset)
-            canvas.drawArc(oval, angle, 72f, false, paint)
-        }
-    }
 }
