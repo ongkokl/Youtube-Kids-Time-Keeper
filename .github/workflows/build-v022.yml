@@ -23,6 +23,14 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
+      - name: Reconstruct validated launcher icon
+        shell: bash
+        run: |
+          cat icon_parts/kid_safe_icon.part1.b64               icon_parts/kid_safe_icon.part2.b64               icon_parts/kid_safe_icon.part3.b64 > /tmp/kid_safe_icon.b64
+          base64 -d /tmp/kid_safe_icon.b64 > app/src/main/res/drawable/kid_safe_icon_v022.webp
+          test "$(stat -c%s app/src/main/res/drawable/kid_safe_icon_v022.webp)" -eq 8126
+          echo "62a061ce57ff933aa4f8f651f9e90851811f3810c0c329ed7da00898903912f9  app/src/main/res/drawable/kid_safe_icon_v022.webp" | sha256sum -c -
+
       - name: Build release AAB
         run: gradle :app:bundleRelease --stacktrace
 
