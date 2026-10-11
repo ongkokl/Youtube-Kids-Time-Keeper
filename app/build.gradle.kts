@@ -5,14 +5,14 @@ plugins {
 
 android {
     namespace = "com.parentguard.youtubetimerguard"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.parentguard.youtubetimerguard"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 8
-        versionName = "0.2.0"
+        targetSdk = 36
+        versionCode = 9
+        versionName = "0.2.1"
     }
 
     buildTypes {

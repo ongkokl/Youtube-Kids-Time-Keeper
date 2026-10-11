@@ -32,8 +32,6 @@ class MonitorService : Service() {
     private var pinPanel: LinearLayout? = null
     private var pinDots: TextView? = null
     private val pinBuffer = StringBuilder()
-    private var tapCount = 0
-    private var firstTapAt = 0L
 
     private val tick = object : Runnable {
         override fun run() {
@@ -48,8 +46,15 @@ class MonitorService : Service() {
                     if (Prefs.lockoutRemainingMillis(this@MonitorService) <= 0L) {
                         finishBreak("Break finished")
                     } else {
-                        muteMediaForLockout()
-                        showLockoutOverlay()
+                        val pkg = currentForegroundPackage()
+                        val isBlockedVideoApp = pkg == YOUTUBE_PACKAGE || pkg == YOUTUBE_KIDS_PACKAGE
+                        if (isBlockedVideoApp) {
+                            muteMediaForLockout()
+                            showLockoutOverlay()
+                        } else {
+                            hideLockoutOverlay()
+                            restoreMediaVolume()
+                        }
                         updateBreakCountdown()
                     }
                 } else {
@@ -66,7 +71,7 @@ class MonitorService : Service() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification("Watching for YouTube use"))
+        startForeground(NOTIFICATION_ID, buildNotification("Screen-time monitoring is active"))
         handler.post(tick)
     }
 
@@ -149,21 +154,11 @@ class MonitorService : Service() {
         }
 
         pinBuffer.clear()
-        tapCount = 0
-        firstTapAt = 0L
 
         val root = FrameLayout(this).apply {
             setBackgroundColor(Color.rgb(13, 27, 42))
             isClickable = true
             isFocusable = true
-            setOnTouchListener { _, event ->
-                if (event.action == MotionEvent.ACTION_DOWN && pinPanel?.visibility != View.VISIBLE) {
-                    val inSecretCorner = event.x < resources.displayMetrics.widthPixels * 0.25f &&
-                        event.y < resources.displayMetrics.heightPixels * 0.25f
-                    if (inSecretCorner) registerSecretTap()
-                }
-                true
-            }
         }
 
         val content = buildBreakContent()
@@ -232,7 +227,7 @@ class MonitorService : Service() {
             setBackgroundColor(Color.rgb(24, 45, 67))
 
             addView(TextView(this@MonitorService).apply {
-                text = "YouTube Timer Guard"
+                text = "Screen Time Guard"
                 setTextColor(Color.rgb(176, 203, 230))
                 textSize = 15f
                 gravity = Gravity.CENTER
@@ -249,7 +244,7 @@ class MonitorService : Service() {
             }, matchWidth())
 
             addView(TextView(this@MonitorService).apply {
-                text = "YouTube time is finished"
+                text = "Viewing time is finished"
                 setTextColor(Color.rgb(210, 224, 238))
                 textSize = 17f
                 gravity = Gravity.CENTER
@@ -268,7 +263,7 @@ class MonitorService : Service() {
             addView(countdown, matchWidth())
 
             addView(TextView(this@MonitorService).apply {
-                text = "You can use YouTube again when the timer reaches 00:00."
+                text = "YouTube and YouTube Kids are available again when the timer reaches 00:00. Other apps remain available during the break."
                 setTextColor(Color.rgb(210, 224, 238))
                 textSize = 15f
                 gravity = Gravity.CENTER
@@ -324,23 +319,6 @@ class MonitorService : Service() {
             val safeVolume = saved.coerceIn(0, audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC))
             audio.setStreamVolume(AudioManager.STREAM_MUSIC, safeVolume, 0)
         } catch (_: SecurityException) {
-        }
-    }
-
-    private fun registerSecretTap() {
-        val now = SystemClock.elapsedRealtime()
-        if (firstTapAt == 0L || now - firstTapAt > 3000L) {
-            firstTapAt = now
-            tapCount = 1
-        } else {
-            tapCount++
-        }
-        if (tapCount >= 5) {
-            tapCount = 0
-            firstTapAt = 0L
-            pinBuffer.clear()
-            updatePinDots()
-            pinPanel?.visibility = View.VISIBLE
         }
     }
 
@@ -429,8 +407,8 @@ class MonitorService : Service() {
     private fun createNotificationChannel() {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "YouTube Timer Guard", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Required while the YouTube timer is active"
+            NotificationChannel(CHANNEL_ID, "Screen Time Guard", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Required while parental screen-time monitoring is active"
                 setShowBadge(false)
             }
         )
@@ -443,8 +421,8 @@ class MonitorService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle("YouTube Timer Guard")
+            .setSmallIcon(R.drawable.ic_stat_screen_time)
+            .setContentTitle("Screen Time Guard")
             .setContentText(text)
             .setOngoing(true)
             .setContentIntent(open)
