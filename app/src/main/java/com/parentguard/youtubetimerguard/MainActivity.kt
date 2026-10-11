@@ -47,6 +47,7 @@ class MainActivity : Activity() {
     }
 
     private lateinit var minutesInput: EditText
+    private lateinit var breakMinutesInput: EditText
     private lateinit var monitorButton: TextView
     private lateinit var monitoringCard: LinearLayout
     private lateinit var monitoringTitle: TextView
@@ -93,7 +94,7 @@ class MainActivity : Activity() {
         }
         monitoringTitle = text("Monitoring is off", 20f, COLOR_TEXT, Typeface.BOLD)
         monitoringDescription = text(
-            "Complete setup, choose a time limit, then start monitoring.",
+            "Complete setup, choose viewing and break limits, then start monitoring.",
             14f,
             COLOR_TEXT_SECONDARY
         ).apply { setPadding(0, dp(6), 0, 0) }
@@ -119,7 +120,7 @@ class MainActivity : Activity() {
         setupCard.addView(divider())
         setupCard.addView(settingRow(
             title = "Display over apps",
-            subtitle = "Shows the shutdown screen when time is up",
+            subtitle = "Shows the break countdown when viewing time is up",
             status = overlayStatus,
             onClick = {
                 startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
@@ -128,19 +129,19 @@ class MainActivity : Activity() {
         setupCard.addView(divider())
         setupCard.addView(settingRow(
             title = "Parent PIN",
-            subtitle = "Required to exit the shutdown screen",
+            subtitle = "Lets a parent end a break early",
             status = pinStatus,
             onClick = { showSetPinDialog() }
         ))
         content.addView(setupCard, matchWidth())
 
-        content.addView(sectionTitle("Time limit", "Continuous YouTube viewing"))
+        content.addView(sectionTitle("Viewing & break limits", "Set viewing time and required break time"))
         val timeCard = card().apply {
             setPadding(dp(18), dp(18), dp(18), dp(18))
         }
         timeCard.addView(text("Viewing limit", 16f, COLOR_TEXT, Typeface.BOLD))
         timeCard.addView(text(
-            "The timer resets when YouTube is closed or the screen turns off.",
+            "Once started, the viewing timer continues even if YouTube is minimized.",
             14f,
             COLOR_TEXT_SECONDARY
         ).apply { setPadding(0, dp(4), 0, dp(16)) })
@@ -180,6 +181,52 @@ class MainActivity : Activity() {
         timeCard.addView(stepper, matchWidth())
         content.addView(timeCard, matchWidth())
 
+        content.addView(space(12))
+        val breakCard = card().apply {
+            setPadding(dp(18), dp(18), dp(18), dp(18))
+        }
+        breakCard.addView(text("Break duration", 16f, COLOR_TEXT, Typeface.BOLD))
+        breakCard.addView(text(
+            "When viewing time is up, a full-screen break countdown is shown. YouTube can be used again when it reaches 00:00.",
+            14f,
+            COLOR_TEXT_SECONDARY
+        ).apply { setPadding(0, dp(4), 0, dp(16)) })
+
+        val breakStepper = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val breakMinus = stepButton("−") { changeBreakMinutes(-1) }
+        val breakPlus = stepButton("+") { changeBreakMinutes(1) }
+        breakStepper.addView(breakMinus, LinearLayout.LayoutParams(dp(48), dp(48)))
+
+        val breakValueBox = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            background = rounded(COLOR_SURFACE_VARIANT, 18f)
+            setPadding(dp(10), 0, dp(10), 0)
+        }
+        breakMinutesInput = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText(Prefs.breakMinutes(this@MainActivity).toString())
+            gravity = Gravity.CENTER
+            textSize = 26f
+            setTextColor(COLOR_TEXT)
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            background = null
+            setSelectAllOnFocus(true)
+            setPadding(0, 0, 0, 0)
+        }
+        breakValueBox.addView(breakMinutesInput, LinearLayout.LayoutParams(dp(70), dp(56)))
+        breakValueBox.addView(text("min", 14f, COLOR_TEXT_SECONDARY))
+        breakStepper.addView(breakValueBox, LinearLayout.LayoutParams(0, dp(56), 1f).apply {
+            marginStart = dp(12)
+            marginEnd = dp(12)
+        })
+        breakStepper.addView(breakPlus, LinearLayout.LayoutParams(dp(48), dp(48)))
+        breakCard.addView(breakStepper, matchWidth())
+        content.addView(breakCard, matchWidth())
+
         content.addView(space(20))
         monitorButton = actionButton("Start monitoring", primary = true) { toggleMonitoring() }
         content.addView(monitorButton, LinearLayout.LayoutParams(
@@ -188,8 +235,8 @@ class MainActivity : Activity() {
         ))
 
         content.addView(space(10))
-        content.addView(actionButton("Test shutdown screen", primary = false) {
-            testShutdown()
+        content.addView(actionButton("Test break countdown", primary = false) {
+            testBreakCountdown()
         }, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             dp(52)
@@ -226,7 +273,7 @@ class MainActivity : Activity() {
         content.addView(text("Designed by Ong KL", 13f, COLOR_TEXT_SECONDARY, Typeface.BOLD).apply {
             gravity = Gravity.CENTER_HORIZONTAL
         }, matchWidth())
-        content.addView(text("YouTube Timer Guard · v0.1.5", 12f, COLOR_TEXT_SECONDARY).apply {
+        content.addView(text("YouTube Timer Guard · v0.2.0", 12f, COLOR_TEXT_SECONDARY).apply {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, dp(4), 0, 0)
         }, matchWidth())
@@ -340,15 +387,18 @@ class MainActivity : Activity() {
         }
 
         val minutes = minutesInput.text.toString().toIntOrNull()?.coerceIn(1, 180) ?: 15
+        val breakMinutes = breakMinutesInput.text.toString().toIntOrNull()?.coerceIn(1, 180) ?: 30
         minutesInput.setText(minutes.toString())
+        breakMinutesInput.setText(breakMinutes.toString())
         Prefs.setLimitMinutes(this, minutes)
+        Prefs.setBreakMinutes(this, breakMinutes)
         Prefs.setLockoutActive(this, false)
         Prefs.setEnabled(this, true)
         startForegroundService(Intent(this, MonitorService::class.java))
         refreshStatus()
     }
 
-    private fun testShutdown() {
+    private fun testBreakCountdown() {
         if (!Prefs.hasPin(this)) {
             toast("Set a parent PIN first")
             return
@@ -366,6 +416,13 @@ class MainActivity : Activity() {
         val next = (current + delta).coerceIn(1, 180)
         minutesInput.setText(next.toString())
         minutesInput.setSelection(minutesInput.text.length)
+    }
+
+    private fun changeBreakMinutes(delta: Int) {
+        val current = breakMinutesInput.text.toString().toIntOrNull() ?: Prefs.breakMinutes(this)
+        val next = (current + delta).coerceIn(1, 180)
+        breakMinutesInput.setText(next.toString())
+        breakMinutesInput.setSelection(breakMinutesInput.text.length)
     }
 
     private fun showSetPinDialog() {
@@ -443,22 +500,23 @@ class MainActivity : Activity() {
 
         if (lockout) {
             monitoringCard.background = rounded(COLOR_ERROR_CONTAINER, 22f)
-            monitoringTitle.text = "Shutdown screen active"
+            monitoringTitle.text = "Break time active"
             monitoringTitle.setTextColor(COLOR_ERROR)
-            monitoringDescription.text = "Use the secret parent unlock gesture and PIN to restore access."
+            val remaining = Prefs.lockoutRemainingMillis(this) / 1000L
+            monitoringDescription.text = "Break countdown: ${remaining / 60}:${(remaining % 60).toString().padStart(2, '0')}. Parent PIN can end it early."
             monitoringDescription.setTextColor(COLOR_ERROR)
         } else if (enabled) {
             monitoringCard.background = rounded(COLOR_PRIMARY_CONTAINER, 22f)
             monitoringTitle.text = "Monitoring is on"
             monitoringTitle.setTextColor(COLOR_PRIMARY)
-            monitoringDescription.text = "YouTube is limited to ${Prefs.limitMinutes(this)} minutes of continuous viewing."
+            monitoringDescription.text = "YouTube: ${Prefs.limitMinutes(this)} min viewing, then ${Prefs.breakMinutes(this)} min break."
             monitoringDescription.setTextColor(COLOR_TEXT_SECONDARY)
         } else {
             monitoringCard.background = rounded(COLOR_SURFACE_VARIANT, 22f)
             monitoringTitle.text = "Monitoring is off"
             monitoringTitle.setTextColor(COLOR_TEXT)
             monitoringDescription.text = if (usageGranted && overlayGranted && pinSet) {
-                "Everything is ready. Choose a time limit and start monitoring."
+                "Everything is ready. Choose viewing and break limits, then start monitoring."
             } else {
                 "Complete the setup items below before starting monitoring."
             }
