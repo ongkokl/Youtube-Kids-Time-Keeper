@@ -32,8 +32,6 @@ class MonitorService : Service() {
     private var pinPanel: LinearLayout? = null
     private var pinDots: TextView? = null
     private val pinBuffer = StringBuilder()
-    private var tapCount = 0
-    private var firstTapAt = 0L
 
     private val tick = object : Runnable {
         override fun run() {
@@ -156,21 +154,11 @@ class MonitorService : Service() {
         }
 
         pinBuffer.clear()
-        tapCount = 0
-        firstTapAt = 0L
 
         val root = FrameLayout(this).apply {
             setBackgroundColor(Color.rgb(13, 27, 42))
             isClickable = true
             isFocusable = true
-            setOnTouchListener { _, event ->
-                if (event.action == MotionEvent.ACTION_DOWN && pinPanel?.visibility != View.VISIBLE) {
-                    val inSecretCorner = event.x < resources.displayMetrics.widthPixels * 0.25f &&
-                        event.y < resources.displayMetrics.heightPixels * 0.25f
-                    if (inSecretCorner) registerSecretTap()
-                }
-                true
-            }
         }
 
         val content = buildBreakContent()
@@ -334,23 +322,6 @@ class MonitorService : Service() {
         }
     }
 
-    private fun registerSecretTap() {
-        val now = SystemClock.elapsedRealtime()
-        if (firstTapAt == 0L || now - firstTapAt > 3000L) {
-            firstTapAt = now
-            tapCount = 1
-        } else {
-            tapCount++
-        }
-        if (tapCount >= 5) {
-            tapCount = 0
-            firstTapAt = 0L
-            pinBuffer.clear()
-            updatePinDots()
-            pinPanel?.visibility = View.VISIBLE
-        }
-    }
-
     private fun buildPinPanel(): LinearLayout {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -450,7 +421,7 @@ class MonitorService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setSmallIcon(R.drawable.ic_stat_screen_time)
             .setContentTitle("Screen Time Guard")
             .setContentText(text)
             .setOngoing(true)
