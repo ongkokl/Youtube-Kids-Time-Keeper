@@ -109,7 +109,7 @@ class MainActivity : Activity() {
         pinStatus = statusChip()
         setupCard.addView(settingRow(
             title = "Usage access",
-            subtitle = "Lets the timer detect when YouTube is in use",
+            subtitle = "Detects when YouTube or YouTube Kids is in the foreground",
             status = usageStatus,
             onClick = {
                 startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
@@ -141,7 +141,7 @@ class MainActivity : Activity() {
         }
         timeCard.addView(text("Viewing limit", 16f, COLOR_TEXT, Typeface.BOLD))
         timeCard.addView(text(
-            "Once started, the viewing timer continues even if YouTube is minimized.",
+            "Once started, the viewing timer continues even if the supported video app is minimized.",
             14f,
             COLOR_TEXT_SECONDARY
         ).apply { setPadding(0, dp(4), 0, dp(16)) })
@@ -187,7 +187,7 @@ class MainActivity : Activity() {
         }
         breakCard.addView(text("Break duration", 16f, COLOR_TEXT, Typeface.BOLD))
         breakCard.addView(text(
-            "When viewing time is up, a full-screen break countdown is shown. YouTube can be used again when it reaches 00:00.",
+            "When viewing time is up, the break countdown blocks YouTube and YouTube Kids while other apps remain available.",
             14f,
             COLOR_TEXT_SECONDARY
         ).apply { setPadding(0, dp(4), 0, dp(16)) })
@@ -242,7 +242,7 @@ class MainActivity : Activity() {
             dp(52)
         ))
 
-        content.addView(sectionTitle("Parent access", "How to recover the phone"))
+        content.addView(sectionTitle("Parent access", "End a break early with the parent PIN"))
         val parentCard = card().apply {
             setPadding(dp(18), dp(16), dp(18), dp(16))
         }
@@ -259,9 +259,9 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(10), 0, 0, 0)
         }
-        parentText.addView(text("Secret parent unlock", 15f, COLOR_TEXT, Typeface.BOLD))
+        parentText.addView(text("Parent unlock", 15f, COLOR_TEXT, Typeface.BOLD))
         parentText.addView(text(
-            "Tap the top-left corner 5 times quickly, then enter the parent PIN.",
+            "On the break screen, tap Parent unlock and enter the PIN. The corner gesture remains available as a backup.",
             14f,
             COLOR_TEXT_SECONDARY
         ).apply { setPadding(0, dp(4), 0, 0) })
@@ -273,7 +273,7 @@ class MainActivity : Activity() {
         content.addView(text("Designed by Ong KL", 13f, COLOR_TEXT_SECONDARY, Typeface.BOLD).apply {
             gravity = Gravity.CENTER_HORIZONTAL
         }, matchWidth())
-        content.addView(text("YouTube Timer Guard · v0.2.0", 12f, COLOR_TEXT_SECONDARY).apply {
+        content.addView(text("Screen Time Guard · v0.2.0", 12f, COLOR_TEXT_SECONDARY).apply {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, dp(4), 0, 0)
         }, matchWidth())
@@ -311,9 +311,9 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), 0, 0, 0)
         }
-        copy.addView(text("YouTube Timer Guard", 24f, COLOR_TEXT, Typeface.BOLD))
+        copy.addView(text("Screen Time Guard", 24f, COLOR_TEXT, Typeface.BOLD))
         copy.addView(text(
-            "Simple, predictable screen-time control",
+            "Parental screen-time control for supported video apps",
             14f,
             COLOR_TEXT_SECONDARY
         ).apply { setPadding(0, dp(3), 0, 0) })
@@ -512,7 +512,7 @@ class MainActivity : Activity() {
             monitoringCard.background = rounded(COLOR_PRIMARY_CONTAINER, 22f)
             monitoringTitle.text = "Monitoring is on"
             monitoringTitle.setTextColor(COLOR_PRIMARY)
-            monitoringDescription.text = "YouTube: ${Prefs.limitMinutes(this)} min viewing, then ${Prefs.breakMinutes(this)} min break."
+            monitoringDescription.text = "Viewing: ${Prefs.limitMinutes(this)} min, then ${Prefs.breakMinutes(this)} min break."
             monitoringDescription.setTextColor(COLOR_TEXT_SECONDARY)
         } else {
             monitoringCard.background = rounded(COLOR_SURFACE_VARIANT, 22f)
