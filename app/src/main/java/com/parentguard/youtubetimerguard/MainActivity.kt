@@ -111,20 +111,14 @@ class MainActivity : Activity() {
             title = "Usage access",
             subtitle = "Detects when YouTube or YouTube Kids is in the foreground",
             status = usageStatus,
-            onClick = {
-                startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
-                    data = Uri.parse("package:$packageName")
-                })
-            }
+            onClick = { showUsageAccessDisclosure() }
         ))
         setupCard.addView(divider())
         setupCard.addView(settingRow(
             title = "Display over apps",
             subtitle = "Shows the break countdown when viewing time is up",
             status = overlayStatus,
-            onClick = {
-                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
-            }
+            onClick = { showOverlayDisclosure() }
         ))
         setupCard.addView(divider())
         setupCard.addView(settingRow(
@@ -261,7 +255,7 @@ class MainActivity : Activity() {
         }
         parentText.addView(text("Parent unlock", 15f, COLOR_TEXT, Typeface.BOLD))
         parentText.addView(text(
-            "On the break screen, tap Parent unlock and enter the PIN. The corner gesture remains available as a backup.",
+            "On the break screen, tap Parent unlock and enter the parent PIN.",
             14f,
             COLOR_TEXT_SECONDARY
         ).apply { setPadding(0, dp(4), 0, 0) })
@@ -273,7 +267,7 @@ class MainActivity : Activity() {
         content.addView(text("Designed by Ong KL", 13f, COLOR_TEXT_SECONDARY, Typeface.BOLD).apply {
             gravity = Gravity.CENTER_HORIZONTAL
         }, matchWidth())
-        content.addView(text("Screen Time Guard · v0.2.0", 12f, COLOR_TEXT_SECONDARY).apply {
+        content.addView(text("Screen Time Guard · v0.2.1", 12f, COLOR_TEXT_SECONDARY).apply {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, dp(4), 0, 0)
         }, matchWidth())
@@ -426,6 +420,34 @@ class MainActivity : Activity() {
         val next = (current + delta).coerceIn(1, 180)
         breakMinutesInput.setText(next.toString())
         breakMinutesInput.setSelection(breakMinutesInput.text.length)
+    }
+
+    private fun showUsageAccessDisclosure() {
+        AlertDialog.Builder(this)
+            .setTitle("Usage Access")
+            .setMessage(
+                "Screen Time Guard checks only whether YouTube or YouTube Kids is currently in the foreground so it can enforce the viewing limit and break countdown. This information stays on this device and is not sent to the developer or third parties."
+            )
+            .setPositiveButton("Continue") { _, _ ->
+                startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                    data = Uri.parse("package:$packageName")
+                })
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showOverlayDisclosure() {
+        AlertDialog.Builder(this)
+            .setTitle("Display over apps")
+            .setMessage(
+                "During a parent-configured break, Screen Time Guard displays its countdown over YouTube or YouTube Kids. Other apps remain available. The overlay is removed automatically when the break ends or a parent ends it with the PIN."
+            )
+            .setPositiveButton("Continue") { _, _ ->
+                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun showSetPinDialog() {
