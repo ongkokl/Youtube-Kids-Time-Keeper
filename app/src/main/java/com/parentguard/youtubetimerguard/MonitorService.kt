@@ -3,8 +3,10 @@ package com.parentguard.youtubetimerguard
 import android.app.*
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.*
 import android.media.AudioManager
 import android.os.*
@@ -18,6 +20,8 @@ class MonitorService : Service() {
         private const val NOTIFICATION_ID = 1515
         private const val YOUTUBE_PACKAGE = "com.google.android.youtube"
         private const val YOUTUBE_KIDS_PACKAGE = "com.google.android.apps.youtube.kids"
+        private const val SECRET_TAP_TARGET = 5
+        private const val SECRET_TAP_WINDOW_MS = 3_000L
         const val ACTION_PARENT_UNLOCKED = "com.parentguard.youtubetimerguard.PARENT_UNLOCKED"
         const val ACTION_TEST_LOCKOUT = "com.parentguard.youtubetimerguard.TEST_LOCKOUT"
     }
@@ -32,6 +36,20 @@ class MonitorService : Service() {
     private var pinPanel: LinearLayout? = null
     private var pinDots: TextView? = null
     private val pinBuffer = StringBuilder()
+    private var secretTapCount = 0
+    private var firstSecretTapAt = 0L
+    private var screenReceiverRegistered = false
+
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (!Prefs.isLockoutActive(this@MonitorService)) return
+            handler.post {
+                muteMediaForLockout()
+                showLockoutOverlay()
+                enforceLockoutUi()
+            }
+        }
+    }
 
     private val tick = object : Runnable {
         override fun run() {
@@ -46,15 +64,9 @@ class MonitorService : Service() {
                     if (Prefs.lockoutRemainingMillis(this@MonitorService) <= 0L) {
                         finishBreak("Break finished")
                     } else {
-                        val pkg = currentForegroundPackage()
-                        val isBlockedVideoApp = pkg == YOUTUBE_PACKAGE || pkg == YOUTUBE_KIDS_PACKAGE
-                        if (isBlockedVideoApp) {
-                            muteMediaForLockout()
-                            showLockoutOverlay()
-                        } else {
-                            hideLockoutOverlay()
-                            restoreMediaVolume()
-                        }
+                        muteMediaForLockout()
+                        showLockoutOverlay()
+                        enforceLockoutUi()
                         updateBreakCountdown()
                     }
                 } else {
@@ -62,7 +74,8 @@ class MonitorService : Service() {
                     updateYouTubeTimer()
                 }
             } finally {
-                handler.postDelayed(this, 1000L)
+                val nextDelay = if (Prefs.isLockoutActive(this@MonitorService)) 250L else 1000L
+                handler.postDelayed(this, nextDelay)
             }
         }
     }
@@ -71,6 +84,7 @@ class MonitorService : Service() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
+        registerScreenReceiver()
         startForeground(NOTIFICATION_ID, buildNotification("Screen-time monitoring is active"))
         handler.post(tick)
     }
@@ -89,6 +103,13 @@ class MonitorService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacks(tick)
+        if (screenReceiverRegistered) {
+            try {
+                unregisterReceiver(screenReceiver)
+            } catch (_: Exception) {
+            }
+            screenReceiverRegistered = false
+        }
         hideLockoutOverlay()
         if (!Prefs.isLockoutActive(this)) restoreMediaVolume()
         super.onDestroy()
@@ -147,18 +168,29 @@ class MonitorService : Service() {
     }
 
     private fun showLockoutOverlay() {
-        if (lockoutOverlay != null) return
+        if (lockoutOverlay != null) {
+            enforceLockoutUi()
+            return
+        }
         if (!Settings.canDrawOverlays(this)) {
             updateNotification("Overlay permission required")
             return
         }
 
         pinBuffer.clear()
+        resetSecretTapSequence()
 
-        val root = FrameLayout(this).apply {
+        val root = LockoutFrameLayout(this).apply {
             setBackgroundColor(Color.rgb(13, 27, 42))
             isClickable = true
             isFocusable = true
+            isFocusableInTouchMode = true
+            systemUiVisibility = lockoutSystemUiFlags()
+            setOnSystemUiVisibilityChangeListener {
+                if (Prefs.isLockoutActive(this@MonitorService)) {
+                    handler.postDelayed({ enforceLockoutUi() }, 80L)
+                }
+            }
         }
 
         val content = buildBreakContent()
@@ -170,6 +202,18 @@ class MonitorService : Service() {
             leftMargin = dp(28)
             rightMargin = dp(28)
         })
+
+        val secretTapZone = View(this).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            isClickable = true
+            isFocusable = false
+            setOnClickListener { registerSecretTap() }
+        }
+        root.addView(secretTapZone, FrameLayout.LayoutParams(
+            dp(104),
+            dp(104),
+            Gravity.TOP or Gravity.START
+        ))
 
         val panel = buildPinPanel()
         pinPanel = panel
@@ -188,18 +232,24 @@ class MonitorService : Service() {
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_FULLSCREEN or
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
             PixelFormat.OPAQUE
         ).apply {
             gravity = Gravity.TOP or Gravity.START
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
         }
 
         try {
             windowManager.addView(root, params)
             lockoutOverlay = root
+            root.requestFocus()
+            enforceLockoutUi()
             updateBreakCountdown()
         } catch (_: Exception) {
             updateNotification("Could not show break countdown")
@@ -217,6 +267,7 @@ class MonitorService : Service() {
         pinPanel = null
         pinDots = null
         pinBuffer.clear()
+        resetSecretTapSequence()
     }
 
     private fun buildBreakContent(): LinearLayout {
@@ -263,21 +314,13 @@ class MonitorService : Service() {
             addView(countdown, matchWidth())
 
             addView(TextView(this@MonitorService).apply {
-                text = "YouTube and YouTube Kids are available again when the timer reaches 00:00. Other apps remain available during the break."
+                text = "YouTube and YouTube Kids are available again when the timer reaches 00:00."
                 setTextColor(Color.rgb(210, 224, 238))
                 textSize = 15f
                 gravity = Gravity.CENTER
                 setPadding(0, dp(18), 0, dp(18))
             }, matchWidth())
 
-            addView(Button(this@MonitorService).apply {
-                text = "PARENT UNLOCK"
-                setOnClickListener {
-                    pinBuffer.clear()
-                    updatePinDots()
-                    pinPanel?.visibility = View.VISIBLE
-                }
-            }, matchWidth())
         }
     }
 
@@ -319,6 +362,88 @@ class MonitorService : Service() {
             val safeVolume = saved.coerceIn(0, audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC))
             audio.setStreamVolume(AudioManager.STREAM_MUSIC, safeVolume, 0)
         } catch (_: SecurityException) {
+        }
+    }
+
+    private fun registerScreenReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("DEPRECATION")
+                registerReceiver(screenReceiver, filter)
+            }
+            screenReceiverRegistered = true
+        } catch (_: Exception) {
+            screenReceiverRegistered = false
+        }
+    }
+
+    private fun lockoutSystemUiFlags(): Int =
+        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+            View.SYSTEM_UI_FLAG_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+
+    private fun enforceLockoutUi() {
+        val root = lockoutOverlay ?: return
+        if (!Prefs.isLockoutActive(this)) return
+        root.systemUiVisibility = lockoutSystemUiFlags()
+        root.isFocusable = true
+        root.isFocusableInTouchMode = true
+        root.requestFocus()
+    }
+
+    private fun registerSecretTap() {
+        if (pinPanel?.visibility == View.VISIBLE) return
+        val now = SystemClock.elapsedRealtime()
+        if (firstSecretTapAt == 0L || now - firstSecretTapAt > SECRET_TAP_WINDOW_MS) {
+            firstSecretTapAt = now
+            secretTapCount = 1
+        } else {
+            secretTapCount += 1
+        }
+
+        if (secretTapCount >= SECRET_TAP_TARGET) {
+            resetSecretTapSequence()
+            pinBuffer.clear()
+            updatePinDots()
+            pinPanel?.visibility = View.VISIBLE
+            pinPanel?.bringToFront()
+        }
+    }
+
+    private fun resetSecretTapSequence() {
+        secretTapCount = 0
+        firstSecretTapAt = 0L
+    }
+
+    private inner class LockoutFrameLayout(context: Context) : FrameLayout(context) {
+        override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+            if (Prefs.isLockoutActive(this@MonitorService)) {
+                when (event.keyCode) {
+                    KeyEvent.KEYCODE_VOLUME_UP,
+                    KeyEvent.KEYCODE_VOLUME_DOWN,
+                    KeyEvent.KEYCODE_VOLUME_MUTE -> {
+                        if (event.action == KeyEvent.ACTION_DOWN) {
+                            muteMediaForLockout()
+                            enforceLockoutUi()
+                        }
+                        return true
+                    }
+                    KeyEvent.KEYCODE_BACK,
+                    KeyEvent.KEYCODE_MENU,
+                    KeyEvent.KEYCODE_APP_SWITCH,
+                    KeyEvent.KEYCODE_POWER -> return true
+                }
+            }
+            return super.dispatchKeyEvent(event)
         }
     }
 
