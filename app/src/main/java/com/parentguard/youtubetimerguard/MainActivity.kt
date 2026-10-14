@@ -255,7 +255,7 @@ class MainActivity : Activity() {
         }
         parentText.addView(text("Parent unlock", 15f, COLOR_TEXT, Typeface.BOLD))
         parentText.addView(text(
-            "On the break screen, tap Parent unlock and enter the parent PIN.",
+            "On the break screen, tap the top-left corner 5 times quickly, then enter the parent PIN.",
             14f,
             COLOR_TEXT_SECONDARY
         ).apply { setPadding(0, dp(4), 0, 0) })
@@ -267,7 +267,7 @@ class MainActivity : Activity() {
         content.addView(text("Designed by Ong KL", 13f, COLOR_TEXT_SECONDARY, Typeface.BOLD).apply {
             gravity = Gravity.CENTER_HORIZONTAL
         }, matchWidth())
-        content.addView(text("Screen Time Guard · v0.2.3", 12f, COLOR_TEXT_SECONDARY).apply {
+        content.addView(text("Screen Time Guard · v0.2.4", 12f, COLOR_TEXT_SECONDARY).apply {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, dp(4), 0, 0)
         }, matchWidth())
@@ -441,7 +441,7 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Display over apps")
             .setMessage(
-                "During a parent-configured break, Screen Time Guard displays its countdown over YouTube or YouTube Kids. Other apps remain available. The overlay is removed automatically when the break ends or a parent ends it with the PIN."
+                "During a parent-configured break, Screen Time Guard keeps its full-screen countdown visible until the break ends. A parent can open the PIN keypad by tapping the top-left corner 5 times quickly."
             )
             .setPositiveButton("Continue") { _, _ ->
                 startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
