@@ -11,8 +11,8 @@ android {
         applicationId = "com.parentguard.youtubetimerguard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.2.4"
+        versionCode = 13
+        versionName = "0.2.5"
     }
 
     buildTypes {
