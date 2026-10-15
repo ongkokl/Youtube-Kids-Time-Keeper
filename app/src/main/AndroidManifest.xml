@@ -23,6 +23,14 @@
             android:value="child_monitoring" />
 
         <activity
+            android:name=".LockoutHostActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:turnScreenOn="false" />
+
+        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
